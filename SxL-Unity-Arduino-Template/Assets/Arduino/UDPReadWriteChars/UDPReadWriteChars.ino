@@ -6,19 +6,24 @@
 //Sample board supplier: https://www.amazon.com/HiLetgo-ESP-WROOM-32-Development-Microcontroller-Integrated/dp/B0718T232Z
 
 // Replace with your network credentials
-const char *ssid = "WIFI NETWORK NAME";//"TP-Link_5E30";
-const char *password = "WIFI NETWORK PASSWORD";//"18506839";
+const char *ssid = "NETGEAR39";//"TP-Link_5E30";
+const char *password = "freshbreeze181";//"18506839";
 
 // Set up UDP
 WiFiUDP udp;
-const char *udpAddress = "192.168.0.102";  // Mac IP address 
+const char *udpAddress = "172.168.10.6";  // Mac IP address 
 const int udpSenderPort = 5006;  // Port for sending data to Unity
 const int udpReceiverPort = 5005;  // Port for receiving data from Unity
 String sentMessage;
 String receivedMessage;
 
-//Char LED Read/Write Demo Variables
-const int ledPin = 4;  // the pin that the LED is attached to
+//Char LED + Buzzer (Desert Maze Game)
+const int ledPin = 2;   // LED: on while Unity game is running
+const int buzzerPin = 4;  // Buzzer: goes off when water touches fountain (change to your pin)
+
+unsigned long buzzerStartTime = 0;
+const unsigned long buzzerDurationMs = 3000;  // How long to buzz when win (ms)
+bool buzzerActive = false;
 
 int charsSent = 0;
 int sendTimer = 0;
@@ -31,8 +36,20 @@ void setup() {
   // Init UDP
   initUDP();
 
-  // initialize the ledPin as an output:
+  // initialize the ledPin and buzzer as outputs:
   pinMode(ledPin, OUTPUT);
+  pinMode(buzzerPin, OUTPUT);
+  digitalWrite(ledPin, LOW);
+  digitalWrite(buzzerPin, LOW);
+
+  // Quick hardware test: LED on + short beep so you know output works
+  digitalWrite(ledPin, HIGH);
+  digitalWrite(buzzerPin, HIGH);
+  delay(200);
+  digitalWrite(buzzerPin, LOW);
+  delay(200);
+  digitalWrite(ledPin, LOW);
+  Serial.println("Output test done. LED and buzzer should have flashed/beeped.");
 }
 
 void loop() {
@@ -48,11 +65,28 @@ void loop() {
   // Listen for a message from UDP (UDP -> Arduino ESP32)
   receivedMessage = receiveUDP();
 
-  // Control the LED based on the received message
-  if (receivedMessage == "c") {
-    digitalWrite(ledPin, HIGH);  // Turn LED on
-  } else if (receivedMessage == "d") {
-    digitalWrite(ledPin, LOW);  // Turn LED off
+  // Trim whitespace/newline so "c", "c\n", "c\r" all work
+  receivedMessage.trim();
+
+  // Use first character so we're robust to extra bytes from Unity
+  char cmd = receivedMessage.length() > 0 ? receivedMessage.charAt(0) : '\0';
+
+  // Control the LED and buzzer based on the received message
+  if (cmd == 'c') {
+    digitalWrite(ledPin, HIGH);  // Turn LED on (game running)
+  } else if (cmd == 'd') {
+    digitalWrite(ledPin, LOW);   // Turn LED off (game stopped)
+  } else if (cmd == 'b') {
+    // Buzzer: water reached fountain (win)
+    buzzerActive = true;
+    buzzerStartTime = millis();
+    digitalWrite(buzzerPin, HIGH);
+  }
+
+  // Turn off buzzer after duration
+  if (buzzerActive && (millis() - buzzerStartTime >= buzzerDurationMs)) {
+    buzzerActive = false;
+    digitalWrite(buzzerPin, LOW);
   }
 
   //Sending data via UDP on a repeating timer (only if WiFi connected):
